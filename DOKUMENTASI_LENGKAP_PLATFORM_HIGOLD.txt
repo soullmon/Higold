@@ -1,0 +1,502 @@
+================================================================================
+          DOKUMENTASI LENGKAP PLATFORM E-COMMERCE & KATALOG ARSITEKTURAL
+                         HIGOLD OFFICIAL INDONESIA
+               PT. SURYA GEMILANG SEJATI (DISTRIBUTOR RESMI)
+================================================================================
+
+Dokumen ini disusun untuk panduan pembelajaran, pengoperasian, integrasi layanan,
+serta tata cara deployment (hosting) ke server produksi.
+
+--------------------------------------------------------------------------------
+DAFTAR ISI
+--------------------------------------------------------------------------------
+1. Pilihan Layanan OTP yang 100% GRATIS (Rekomendasi & Cara Kerja)
+2. Arsitektur Komponen Frontend & Struktur Halaman
+3. Fitur-Fitur Lengkap Platform HIGOLD
+4. Integrasi Layanan Eksternal (API & Gateway)
+5. Struktur Atribut Data & Tipe Skema (TypeScript)
+6. Panduan Lengkap Cara Deploy & Hosting ke Server Produksi
+   - Opsi A: Deploy Gratis ke Vercel (Paling Cepat & Mudah)
+   - Opsi B: Deploy Gratis ke Netlify
+   - Opsi C: Deploy ke VPS Linux (Ubuntu + Nginx + PM2)
+   - Opsi D: Deploy ke Web Hosting Biasa / cPanel (Shared Hosting)
+   - Opsi E: Deploy Docker / Google Cloud Run / Railway
+
+================================================================================
+1. PILIHAN LAYANAN OTP YANG 100% GRATIS (REKOMENDASI & CARA KERJA)
+================================================================================
+
+Jika Anda ingin menerapkan verifikasi OTP tanpa biaya langganan bulanan atau
+tanpa membayar pulsa SMS per pesan, berikut adalah solusi gratis terbaik:
+
+A. GOOGLE FIREBASE PHONE AUTHENTICATION (SMS OTP GRATIS RESMI)
+   - Biaya: 100% GRATIS hingga 10.000 verifikasi SMS per bulan (Spark Free Plan).
+   - Cara Kerja: Google menangani pengiriman SMS kode OTP langsung ke nomor HP
+     pengguna di Indonesia (+62) disertai proteksi Google reCAPTCHA.
+   - Kelebihan: Resmi, anti-spam, kuota 10.000 SMS/bulan sangat besar untuk
+     toko online menengah, tidak butuh beli pulsa SMS.
+   - Cara Integrasi:
+     1. Buka console.firebase.google.com -> Buat Proyek Baru.
+     2. Aktifkan menu "Authentication" -> Pilih metode "Phone".
+     3. Pasang library: npm install firebase
+     4. Di React, panggil window.recaptchaVerifier dan signInWithPhoneNumber(auth, phone, recaptchaVerifier).
+     5. Pengguna menerima SMS berisi 6 digit kode dari Google.
+
+B. EMAIL OTP VIA GMAIL SMTP (NODEMAILER) - PILIHAN UTAMA
+   - Biaya: 100% GRATIS hingga 500 email OTP per hari per akun Gmail (Google Workspace hingga 2.000 email/hari).
+   - Cara Kerja: Server backend Node.js (Express) mengirimkan email kode OTP 6 digit berformat HTML mewah resmi HIGOLD via akun Gmail Anda menggunakan protokol SMTP TLS terenkripsi port 465/587.
+   - Kelebihan: Nol rupiah, tidak memerlukan kartu kredit, setup sangat cepat (5 menit), langsung aktif tanpa review Meta atau provider SMS.
+   - Langkah Pembuatan Google App Password (Sandi Aplikasi):
+     1. Buka akun Google Anda di https://myaccount.google.com/
+     2. Pilih tab "Keamanan" (Security).
+     3. Pastikan "Verifikasi 2 Langkah" (2-Step Verification) sudah AKTIF.
+     4. Cari menu "Sandi Aplikasi" (App Passwords) atau kunjungi langsung:
+        https://myaccount.google.com/apppasswords
+     5. Beri nama aplikasi, misalnya "HIGOLD Store OTP".
+     6. Google akan memberikan 16 karakter sandi unik (misal: "abcd efgh ijkl mnop").
+     7. Salin sandi tersebut ke file .env server Anda sebagai GMAIL_APP_PASSWORD.
+
+   - File Konfigurasi .env Backend:
+     ----------------------------------------------------------------
+     PORT=5000
+     GMAIL_USER=order.higoldindonesia@gmail.com
+     GMAIL_APP_PASSWORD=abcdefghijklmnop
+     JWT_SECRET=higold_super_secret_jwt_key_2026
+     CLIENT_URL=http://localhost:3000
+     ----------------------------------------------------------------
+
+   - Implementasi Kode Server Lengkap (server/otpMailer.js):
+     ----------------------------------------------------------------
+     import express from 'express';
+     import nodemailer from 'nodemailer';
+     import cors from 'cors';
+
+     const app = express();
+     app.use(express.json());
+     app.use(cors());
+
+     // In-memory store OTP dengan masa kedaluwarsa 5 menit
+     const otpStore = new Map();
+
+     // Inisialisasi Transporter Nodemailer Gmail SMTP
+     const transporter = nodemailer.createTransport({
+       service: 'gmail',
+       auth: {
+         user: process.env.GMAIL_USER,
+         pass: process.env.GMAIL_APP_PASSWORD,
+       },
+     });
+
+     // 1. Endpoint Kirim OTP
+     app.post('/api/send-otp', async (req, res) => {
+       try {
+         const { email } = req.body;
+         if (!email) return res.status(400).json({ error: 'Email wajib diisi' });
+
+         // Generate 6 digit angka acak
+         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+         const expiresAt = Date.now() + 5 * 60 * 1000; // 5 menit
+
+         otpStore.set(email.toLowerCase(), { code: otpCode, expiresAt });
+
+         // Template Email HTML Mewah Resmi HIGOLD
+         const mailHtml = `
+           <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 12px; overflow: hidden;">
+             <div style="background: #171717; padding: 24px; text-align: center; border-bottom: 3px solid #C8A15A;">
+               <h1 style="color: #ffffff; margin: 0; font-size: 22px; letter-spacing: 2px;">HIGOLD</h1>
+               <p style="color: #C8A15A; margin: 4px 0 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Hardware Arsitektural & Dapur Mewah</p>
+             </div>
+             <div style="padding: 28px 24px;">
+               <h2 style="color: #171717; font-size: 16px; margin: 0 0 12px 0;">Verifikasi Akun Pengguna</h2>
+               <p style="color: #555555; font-size: 13px; line-height: 1.6; margin: 0 0 20px 0;">
+                 Terima kasih telah mendaftar di <strong>HIGOLD Indonesia</strong>. Gunakan kode OTP berikut untuk menyelesaikan proses registrasi dan otorisasi unduhan dokumen PDF Anda:
+               </p>
+               <div style="text-align: center; margin: 24px 0;">
+                 <div style="display: inline-block; background: #FAF6ED; border: 2px dashed #C8A15A; border-radius: 8px; padding: 14px 28px;">
+                   <span style="font-family: monospace; font-size: 28px; font-weight: bold; letter-spacing: 6px; color: #171717;">${otpCode}</span>
+                 </div>
+                 <p style="color: #888888; font-size: 11px; margin: 8px 0 0 0;">Berlaku selama 5 menit. Jangan bagikan kode ini kepada siapa pun.</p>
+               </div>
+               <p style="color: #555555; font-size: 12px; line-height: 1.5; margin: 0;">
+                 Setelah akun terverifikasi, Anda dapat melakukan pemesanan (checkout) serta mengunduh katalog PDF resmi dan lembar kerja CAD.
+               </p>
+             </div>
+             <div style="background: #f9f9f9; padding: 16px 24px; text-align: center; border-top: 1px solid #eeeeee;">
+               <p style="color: #999999; font-size: 10px; margin: 0;">
+                 PT Surya Gemilang Sejati - Distributor Resmi HIGOLD Indonesia<br>
+                 Kawasan Industri Pluit, Penjaringan, Jakarta Utara
+               </p>
+             </div>
+           </div>
+         `;
+
+         await transporter.sendMail({
+           from: `"HIGOLD Indonesia" <${process.env.GMAIL_USER}>`,
+           to: email,
+           subject: `${otpCode} adalah Kode Verifikasi OTP HIGOLD Anda`,
+           html: mailHtml,
+         });
+
+         return res.json({ success: true, message: 'Kode OTP berhasil dikirim via Gmail SMTP' });
+       } catch (error) {
+         console.error('Error send OTP:', error);
+         return res.status(500).json({ error: 'Gagal mengirim email OTP' });
+       }
+     });
+
+     // 2. Endpoint Verifikasi OTP
+     app.post('/api/verify-otp', (req, res) => {
+       const { email, otp } = req.body;
+       const record = otpStore.get(email?.toLowerCase());
+
+       if (!record) {
+         return res.status(400).json({ error: 'Kode OTP tidak ditemukan atau telah kedaluwarsa' });
+       }
+       if (Date.now() > record.expiresAt) {
+         otpStore.delete(email.toLowerCase());
+         return res.status(400).json({ error: 'Kode OTP telah kedaluwarsa. Silakan minta kode baru.' });
+       }
+       if (record.code !== otp.trim()) {
+         return res.status(400).json({ error: 'Kode OTP tidak cocok' });
+       }
+
+       // OTP Valid -> Hapus dari store
+       otpStore.delete(email.toLowerCase());
+       return res.json({ success: true, message: 'Verifikasi OTP berhasil' });
+     });
+
+     app.listen(5000, () => console.log('Server OTP Gmail SMTP aktif di port 5000'));
+     ----------------------------------------------------------------
+
+C. EMAIL OTP VIA RESEND ATAU BREVO (SENDINBLUE)
+   - Biaya:
+     * Resend: GRATIS 3.000 email per bulan (100 email per hari).
+     * Brevo: GRATIS 300 email per hari (9.000 email per bulan).
+   - Kelebihan: Email masuk ke folder Inbox (bukan Spam), reputasi domain tinggi,
+     dashboard analitik klik dan kirim.
+   - Cara Integrasi:
+     Daftar di resend.com -> Dapatkan API Key -> Panggil SDK: resend.emails.send({...})
+
+D. WHATSAPP OTP MANDIRI GRATIS (VIA BAILEYS / WHATSAPP-WEB.JS)
+   - Biaya: 100% GRATIS TANPA BIAYA API (Unlimited WhatsApp message).
+   - Cara Kerja: Menjalankan server bot WhatsApp Node.js sendiri yang tersambung
+     dengan cara Scan QR nomor WhatsApp CS/Admin toko Anda.
+   - Kelebihan: Pengguna menerima kode OTP langsung di WhatsApp resmi HIGOLD
+     tanpa bayar per pesan ke Meta/Facebook.
+   - Library: @whiskeysockets/baileys atau whatsapp-web.js di server Node.js.
+
+================================================================================
+2. ARSITEKTUR KOMPONEN FRONTEND & STRUKTUR HALAMAN
+================================================================================
+
+Aplikasi ini dibangun menggunakan arsitektur Single Page Application (SPA)
+berbasis React 19 + TypeScript + Tailwind CSS 4 dengan struktur direktori modular:
+
+/src
+├── components/
+│   ├── Navbar.tsx             -> Header 2 baris (Nav links, Logo HIGOLD, Search, Lokasi, Cart, Akun)
+│   ├── Footer.tsx             -> Footer korporat (Legal PT Surya Gemilang Sejati, Jam Showroom, WhatsApp)
+│   ├── ProductCard.tsx        -> Kartu produk katalog (Harga Rupiah, badge finish, rating, quick add)
+│   ├── ProductCatalogRow.tsx  -> Tampilan alternatif baris katalog list view
+│   ├── ProductModal.tsx       -> Modal detail spesifikasi produk, varian ukuran, rel soft-close, garansi 5 thn
+│   ├── CabinetCalculator.tsx  -> Kalkulator kalkulasi modul kabinet dapur inline di halaman
+│   ├── CartDrawer.tsx         -> Panel samping keranjang belanja & ringkasan subtotal
+│   ├── CheckoutModal.tsx      -> Formulir checkout + Integrasi Cek Ongkir & Create Order Biteship
+│   ├── OrderSuccessModal.tsx  -> Dialog konfirmasi sukses order, No. Resi Biteship & tombol WA
+│   ├── InvoiceViewerModal.tsx -> Modal preview dan cetak nota resmi tagihan pemesanan
+│   ├── WhatsAppModal.tsx      -> Modal pemilihan staf Customer Service resmi untuk konsultasi
+│   ├── AuthModal.tsx          -> Modal login, registrasi multi-role, dan verifikasi OTP
+│   ├── ShowroomModal.tsx      -> Formulir janji temu & jadwal kunjungan Showroom Pluit Jakarta Utara
+│   ├── SearchModal.tsx        -> Pencarian instan produk berdasarkan nama, kode SKU, dan tipe kabinet
+│   ├── admin/
+│   │   ├── AdminSidebar.tsx       -> Navigasi menu panel administrasi (13 menu operasional)
+│   │   ├── AdminHeader.tsx        -> Header status role CMS (Admin Emas / CS Biru)
+│   │   ├── AdminDashboardTab.tsx  -> Metrik inventaris, grafik omzet, ringkasan transaksi
+│   │   ├── AdminCatalogTab.tsx    -> Input data produk, varian SKU ukuran, foto & video teknis
+│   │   ├── AdminCategoriesTab.tsx -> Manajemen kategori, subkategori & fitur unggah gambar icon kategori
+│   │   ├── AdminOrdersTab.tsx     -> Kelola pesanan masuk & verifikasi status pembayaran
+│   │   ├── AdminShippingTab.tsx   -> Pelacakan logistik, input nomor resi ekspedisi & ekspor CSV
+│   │   ├── AdminPromotionTab.tsx  -> Manajemen reward poin belanja & voucher promo
+│   │   ├── AdminCustomersTab.tsx  -> Database pelanggan, kontraktor, desainer interior, retailer
+│   │   ├── AdminReportsTab.tsx    -> Pusat tiket laporan garansi 5 tahun & kendala instalasi
+│   │   ├── AdminReviewsTab.tsx    -> Moderasi ulasan produk & kirim tanggapan resmi CS
+│   │   ├── AdminDesignTab.tsx     -> Pengaturan banner carousel beranda & upload e-katalog PDF
+│   │   ├── AdminBroadcastTab.tsx  -> Kirim pengumuman massal via WhatsApp/Email ke mitra
+│   │   ├── AdminFinancialTab.tsx  -> Laporan arus kas, total omzet masuk, dan metode pembayaran
+│   │   └── AdminManageTab.tsx     -> Pengaturan akun staf, ubah PIN otorisasi, hak akses RBAC
+│   └── pages/
+│       ├── HomePage.tsx       -> Beranda (Banner Hero, Kategori, Produk Unggulan, Kalkulator Kabinet)
+│       ├── CategoryPage.tsx   -> Katalog produk per kategori lengkap dengan kartu icon kategori
+│       ├── AboutPage.tsx      -> Profil PT Surya Gemilang Sejati & sertifikasi internasional HIGOLD
+│       ├── PortfolioPage.tsx  -> Dokumentasi proyek instalasi residensial, villa, dan apartemen
+│       ├── ContactPage.tsx    -> Lokasi Showroom Pluit, peta, kontak direct WhatsApp
+│       ├── SupportPage.tsx    -> Layanan panduan instalasi hardware & klaim garansi
+│       ├── ProfilePage.tsx    -> Akun pengguna, riwayat belanja, dan perolehan poin royalty
+│       ├── AdminPage.tsx      -> Halaman utama Backoffice CMS terpadu
+│       └── PolicyPage.tsx     -> Syarat ketentuan, kebijakan privasi, tata cara order & bebas ongkir
+├── data/
+│   ├── products.ts            -> Database produk resmi HIGOLD (Diamond, Shearer, Arena series)
+│   ├── indonesiaRegions.ts    -> Database kota/kabupaten se-Indonesia + jarak km ke Gudang Pluit
+│   ├── csContacts.ts          -> Data nomor resmi tim Customer Service & Technical Support
+│   └── cmsData.ts             -> Seed data awal CMS (Ulasan, tiket komplain, transaksi)
+├── services/
+│   └── biteshipApi.ts         -> Service integrasi resmi API Biteship Gateway (Cek Ongkir & AWB)
+└── utils/
+    ├── format.ts              -> Helper format mata uang Rupiah (contoh: Rp 3.500.000)
+    └── generateInvoice.ts     -> Mesin render nota invoice HTML A4 resmi
+
+================================================================================
+3. FITUR-FITUR LENGKAP PLATFORM HIGOLD
+================================================================================
+
+1. KATALOG HARDWARE KABINET ARSITEKTURAL
+   - Pilihan varian modul lebar kabinet standar arsitektur: 400, 450, 600, 800, 900 mm.
+   - Setiap varian ukuran memiliki nomor SKU independen, harga tersendiri, dan dimensi fisik.
+   - Pilihan arah bukaan pintu kabinet: Bukaan Kiri (Left Open) dan Bukaan Kanan (Right Open).
+   - Pilihan warna finishing mewah: Titanium Grey, Champagne Gold, Matte Black, Stainless Steel.
+   - Fitur Quick Add to Cart untuk pembelian cepat.
+
+2. KALKULATOR MODUL KABINET (CABINET CALCULATOR)
+   - Terintegrasi langsung di dalam halaman utama (inline section).
+   - Akses cepat dari tombol navigasi header yang langsung melakukan scroll mulus ke bagian kalkulator.
+   - Membantu arsitek, desainer interior, dan pemilik rumah mencocokkan ukuran kabinet dengan tipe hardware yang tepat.
+
+3. SISTEM PENGIRIMAN & CEK ONGKIR OTOMATIS (BITESHIP GATEWAY)
+   - Titik Asal Pengiriman: Gudang Pusat Higold Indonesia, Penjaringan, Pluit, Jakarta Utara 14450.
+   - Aturan Resmi Bebas Ongkir: Otomatis Rp 0 (BEBAS ONGKIR) untuk alamat dalam radius <= 10 km.
+   - Pengiriman Nasional: Di atas 10 km dihitung otomatis oleh Biteship API dengan kurir kargo:
+     JNE Trucking (JTR), SiCepat GOKIL, J&T Cargo, Anteraja Cargo, dan Armada Truk Higold.
+   - Nomor Resi (AWB) Resmi: Terbit otomatis secara real-time saat transaksi berhasil dibuat.
+
+4. SISTEM CHECKOUT, NOTA INVOICE DIGITAL & PEMBAYARAN MANUAL
+   - Pilihan Pembayaran: Transfer Bank BCA, Bank Mandiri a/n PT Surya Gemilang Sejati, atau QRIS Toko.
+   - Batas Waktu Pembayaran: 24 Jam sejak nota invoice digital diterbitkan.
+   - Nota Invoice Digital Standar A4: Dilengkapi nomor nota unik (INV/2026/HGD-xxxxxx), rincian SKU,
+     biaya ongkir Biteship, dan tombol langsung cetak PDF atau kirim bukti bayar ke WhatsApp Admin.
+
+5. MANAJEMEN KATEGORI & UNGGAH GAMBAR ICON (CMS ADMIN)
+   - Panel admin memiliki tab khusus "Kategori & Icon".
+   - Admin dapat membuat kategori baru atau memperbarui kategori lama.
+   - Fitur unggah file gambar icon (format PNG, SVG, JPG, WebP) langsung dari komputer atau via tautan gambar.
+   - Gambar icon otomatis tampil pada kartu kategori di halaman katalog produk (`CategoryPage`).
+
+6. 7 TIPE AKUN PENGGUNA RESMI & SISTEM ROYALTY POIN
+   - Tipe Akun: Admin, CS, Pelanggan, Kontraktor, Retailer, Konsultan, Konsultan & Kontraktor.
+   - Poin Belanja: Setiap pembelian otomatis menghasilkan poin reward yang dapat ditukar dengan
+     voucher diskon proyek atau paket hadiah.
+
+7. KONSULTASI RESMI WHATSAPP CS
+   - Akses konsultasi langsung terintegrasi pada Header/Navbar, Footer korporat, modal produk teknis, dan halaman Showroom tanpa tombol mengambang yang menghalangi konten.
+
+8. SISTEM KEAMANAN UNDUH DOKUMEN & E-KATALOG PDF RESMI
+   - Kebijakan Akses: Seluruh unduhan file dokumen teknis (e-Katalog master PDF, lembar kerja CAD, manual book instalasi, dan sertifikat uji beban) TERPROTEKSI secara otomatis.
+   - Non-User / Tamu (Guest): Pengunjung yang belum terdaftar atau belum login tidak dapat mengunduh dokumen. Tombol menampilkan status "Masuk untuk Unduh PDF" disertai ikon gembok proteksi dan peringatan resmi.
+   - User Terdaftar / Login: Pengguna dan mitra resmi yang telah memverifikasi akun dapat langsung mengunduh seluruh katalog PDF secara instan tanpa batasan kuota.
+   - Unduh Nota Tagihan (Invoice PDF): Sama halnya dengan e-katalog, pencetakan dan pengunduhan nota resmi A4 hanya diizinkan untuk pemilik akun yang sah.
+
+================================================================================
+4. INTEGRASI LAYANAN EKSTERNAL (API & GATEWAY)
+================================================================================
+
+A. INTEGRASI API BITESHIP (src/services/biteshipApi.ts)
+   - Endpoint Rates Check: POST https://api.biteship.com/v1/rates/couriers
+     Digunakan untuk menghitung ongkir kargo arsitektural secara otomatis berdasarkan
+     koordinat/wilayah asal (Penjaringan) dan wilayah tujuan pemesan.
+   - Endpoint Create Order: POST https://api.biteship.com/v1/orders
+     Mengirim data nama penerima, nomor kontak, rincian dimensi hardware, dan menerbitkan
+     Nomor Resi Resmi (Waybill ID / AWB) secara instan.
+
+B. INTEGRASI WHATSAPP BUSINESS GATEWAY DIRECT LINK
+   - Memanfaatkan protokol standar: https://wa.me/6281288992311?text=...
+   - Menyusun template pesan dinamis berisi Nomor Nota, Nomor Resi Biteship,
+     rincian barang yang dibeli, dan total tagihan rupiah otomatis.
+
+C. INTEGRASI IMPORT/EXPORT DATA EXCEL SHEETJS (xlsx)
+   - Memungkinkan admin mengunduh seluruh data pengiriman kargo dalam format `.csv` atau `.xlsx`.
+   - Memungkinkan admin melakukan impor katalog produk massal dari file Excel.
+
+================================================================================
+5. STRUKTUR ATRIBUT DATA & TIPE SKEMA (TYPESCRIPT)
+================================================================================
+
+1. Tipe Produk (`Product` di src/types/index.ts):
+   {
+     id: string;                     // ID unik (contoh: "diamond-blind-corner")
+     name: string;                   // Nama resmi produk hardware
+     sku: string;                    // Kode SKU dasar
+     categoryId: CategoryId;         // Kategori (corner-units, larder-units, dll)
+     subcategoryId: SubcategoryId;   // Subkategori (swing-trays, magic-corner, dll)
+     series: ProductSeries;          // Seri (Diamond, Shearer, Arena, Fashion)
+     price: number;                  // Harga satuan dalam Rupiah
+     originalPrice?: number;         // Harga coret promo
+     cabinetWidths: number[];        // Daftar lebar modul (misal: [800, 900])
+     openingDirections?: string[];   // Pilihan bukaan: ['Kiri', 'Kanan']
+     finishOptions: string[];        // Pilihan finishing warna
+     variants?: ProductSizeVariant[];// Rincian ukuran, SKU varian & dimensi PxLxT
+     images: string[];               // Foto katalog produk beresolusi tinggi
+     features: string[];             // Keunggulan mekanis & sertifikasi
+   }
+
+2. Tipe Kategori (`CategoryInfo` di src/types/index.ts):
+   {
+     id: CategoryId;                 // Slug URL kategori (misal: "corner-units")
+     name: string;                   // Nama kategori (misal: "Corner Units")
+     tagline: string;                // Slogan singkat kategori
+     description: string;            // Keterangan fungsi arsitektur
+     subcategories: { id, name }[];  // Daftar sub-produk di dalamnya
+     heroImage: string;              // Foto banner kategori
+     iconUrl?: string;               // URL / Base64 gambar icon yang diunggah
+     iconType?: string;              // Tipe icon bawaan
+     isCustom?: boolean;             // True jika kategori dibuat oleh Admin
+   }
+
+3. Tipe Pesanan (`Order` di src/types/index.ts):
+   {
+     id: string;                     // ID sistem pesanan
+     orderNumber: string;            // Nomor Order (contoh: "HGD-123456")
+     invoiceNumber: string;          // Nomor Faktur (contoh: "INV/2026/HGD-123456")
+     trackingNumber: string;         // Nomor Resi Resmi AWB Biteship
+     shippingCarrier: string;        // Nama kurir (misal: "JNE Trucking - JTR Kargo")
+     shippingCost: number;           // Biaya ongkos kirim (Rp 0 jika jarak <= 10 km)
+     isFreeShipping: boolean;        // Status bebas ongkir
+     trackingStatus: OrderTrackingStatus; // diproses, qc_gudang, diserahkan_kurir, dalam_pengiriman, sampai_tujuan
+     paymentMethod: 'bank_transfer_bca' | 'bank_transfer_mandiri' | 'qris';
+     customer: CustomerDetails;      // Nama, nomor WA, alamat lengkap, kota
+     items: CartItem[];              // Rincian produk kabinet yang dipesan
+     subtotal: number;               // Total belanja produk
+     totalAmount: number;            // Subtotal + Ongkir
+     createdAt: string;              // Waktu pembuatan nota
+   }
+
+================================================================================
+6. PANDUAN CARA DEPLOY & HOSTING KE SERVER PRODUKSI
+================================================================================
+
+Aplikasi ini berbasis frontend Vite React SPA (Single Page Application).
+Artinya, aplikasi dapat di-hosting di layanan statis modern mana pun secara
+sangat cepat, gratis atau berbayar, dengan performa CDN global.
+
+--------------------------------------------------------------------------------
+OPSI A: DEPLOY KE VERCEL (100% GRATIS, PALING DIREKOMENDASIKAN)
+--------------------------------------------------------------------------------
+Langkah-langkah:
+1. Buat akun di https://vercel.com (login dengan akun GitHub).
+2. Unggah/Push repositori kode proyek ini ke GitHub Anda.
+3. Di dashboard Vercel, klik tombol "Add New..." -> "Project".
+4. Pilih repositori GitHub proyek HIGOLD ini.
+5. Vercel otomatis mendeteksi konfigurasi Vite:
+   - Framework Preset : Vite
+   - Build Command    : npm run build
+   - Output Directory : dist
+6. Klik "Deploy". Dalam 1 menit, website Anda telah live dengan domain HTTPS resmi
+   (misal: higold-indonesia.vercel.app) atau bisa disambungkan ke domain .co.id Anda.
+
+Agar semua rute URL berjalan lancar saat di-refresh pada Vercel, pastikan ada file
+`vercel.json` di root proyek dengan isi:
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+
+--------------------------------------------------------------------------------
+OPSI B: DEPLOY KE NETLIFY (100% GRATIS)
+--------------------------------------------------------------------------------
+1. Buat akun di https://www.netlify.com.
+2. Hubungkan repositori GitHub Anda ke Netlify.
+3. Atur konfigurasi build:
+   - Build command : npm run build
+   - Publish directory : dist
+4. Tambahkan file bernama `_redirects` di dalam folder `/public` dengan isi:
+   /*    /index.html   200
+5. Klik "Deploy Site".
+
+--------------------------------------------------------------------------------
+OPSI C: DEPLOY KE VPS LINUX (UBUNTU 22.04 / 24.04 + NGINX)
+--------------------------------------------------------------------------------
+Jika Anda memiliki server VPS sendiri (DigitalOcean, AWS EC2, Linode, Biznet, IDCloudHost):
+
+1. Masuk ke terminal VPS via SSH:
+   ssh root@ip_server_anda
+
+2. Pasang Node.js & Nginx:
+   sudo apt update
+   sudo apt install -y nginx nodejs npm
+
+3. Clone kode proyek ke server:
+   cd /var/www
+   git clone <URL_REPO_ANDA> higold-web
+   cd higold-web
+
+4. Install dependensi dan build proyek:
+   npm install
+   npm run build
+   (Hasil build akan tersimpan di folder /var/www/higold-web/dist)
+
+5. Konfigurasi Nginx Web Server:
+   sudo nano /etc/nginx/sites-available/higold
+
+   Isikan konfigurasi berikut:
+   server {
+       listen 80;
+       server_name higold.co.id www.higold.co.id;
+       root /var/www/higold-web/dist;
+       index index.html;
+
+       location / {
+           try_files $uri $uri/ /index.html;
+       }
+
+       # Cache aset statis untuk performa maksimal
+       location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+           expires 1y;
+           add_header Cache-Control "public, no-transform";
+       }
+   }
+
+6. Aktifkan situs dan restart Nginx:
+   sudo ln -s /etc/nginx/sites-available/higold /etc/nginx/sites-enabled/
+   sudo nginx -t
+   sudo systemctl restart nginx
+
+7. Pasang Sertifikat SSL HTTPS Gratis (Let's Encrypt Certbot):
+   sudo apt install -y certbot python3-certbot-nginx
+   sudo certbot --nginx -d higold.co.id -d www.higold.co.id
+
+--------------------------------------------------------------------------------
+OPSI D: DEPLOY KE WEB HOSTING CPANEL (SHARED HOSTING BIASA)
+--------------------------------------------------------------------------------
+1. Di komputer Anda, jalankan perintah:
+   npm run build
+2. Folder bernama `dist` akan terbentuk di proyek Anda.
+3. Buka File Manager di cPanel hosting Anda.
+4. Masuk ke folder `public_html`.
+5. Unggah seluruh isi file yang ada di DALAM folder `dist` (termasuk index.html dan folder assets).
+6. Buat file bernama `.htaccess` di dalam `public_html` dengan konfigurasi:
+   <IfModule mod_rewrite.c>
+     RewriteEngine On
+     RewriteBase /
+     RewriteRule ^index\.html$ - [L]
+     RewriteCond %{REQUEST_FILENAME} !-f
+     RewriteCond %{REQUEST_FILENAME} !-d
+     RewriteRule . /index.html [L]
+   </IfModule>
+
+--------------------------------------------------------------------------------
+OPSI E: DEPLOY DOCKER / CLOUD RUN / RAILWAY
+--------------------------------------------------------------------------------
+Jika menggunakan kontainer Docker, buat file `Dockerfile`:
+   FROM node:20-alpine AS build
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm install
+   COPY . .
+   RUN npm run build
+
+   FROM nginx:alpine
+   COPY --from=build /app/dist /usr/share/nginx/html
+   COPY nginx.conf /etc/nginx/conf.d/default.conf
+   EXPOSE 80
+   CMD ["nginx", "-g", "daemon off;"]
+
+================================================================================
+DOKUMENTASI INI DIBUAT UNTUK PENGEMBANGAN DAN OPERASIONAL RESMI HIGOLD INDONESIA.
+================================================================================

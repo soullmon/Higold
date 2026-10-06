@@ -1,0 +1,6 @@
+{
+  "name": "HIGOLD Indonesia - Premium Kitchen Hardware",
+  "description": "Katalog resmi & pemesanan online perangkat keras dapur premium: Corner Units, Larder Units, Base Units, Midway Accessories, Sink & Faucet.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
